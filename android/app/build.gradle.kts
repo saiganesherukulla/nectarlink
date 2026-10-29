@@ -17,7 +17,7 @@ val appVersionCode: Int = appVersion.substringBefore('-').split('.').map(String:
 android {
     namespace = "app.nectarlink.android"
     compileSdk = 37
-    ndkVersion = "30.0.16248370"
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "app.nectarlink"

@@ -31,7 +31,9 @@ QtObject {
     function syncIslandWindow() {
         if (Preferences.nectarIsland) {
             if (!app.islandWindow) {
-                const w = islandWindowComponent.createObject(app)
+                const w = islandWindowComponent.createObject(app, {
+                    mainWindowActive: Qt.binding(() => !!(app.mainWindow && app.mainWindow.visible && app.mainWindow.active && app.mainWindow.visibility !== Window.Minimized))
+                })
                 if (w) {
                     app.islandWindow = w
                 } else {

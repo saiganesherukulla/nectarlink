@@ -308,6 +308,7 @@ Item {
                 iconPath: Icons.refresh
                 label: qsTr("Refresh")
                 enabled: Photos.status !== "loading"
+                busy: Photos.status === "loading"
                 onClicked: Photos.refresh()
             }
         }

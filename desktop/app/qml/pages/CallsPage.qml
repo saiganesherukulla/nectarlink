@@ -223,6 +223,7 @@ Item {
                 iconPath: Icons.refresh
                 label: qsTr("Refresh")
                 enabled: PhoneCall.logStatus !== "loading" && PhoneCall.contactsStatus !== "loading"
+                busy: PhoneCall.logStatus === "loading" || PhoneCall.contactsStatus === "loading"
                 onClicked: PhoneCall.refresh()
             }
         }

@@ -880,6 +880,12 @@ NativeWindow {
             Behavior on color { ColorAnimation { duration: Theme.fadeNormal } }
             border.width: 0
 
+            Spinner {
+                anchors.centerIn: parent
+                visible: pageLoader.status === Loader.Loading
+                width: 32; height: 32
+            }
+
             Loader {
                 id: pageLoader
                 anchors.fill: parent

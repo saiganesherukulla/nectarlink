@@ -601,15 +601,35 @@ Item {
         }
 
         footer: Item {
+            id: footerItem
             width: listView.width
             height: TimelineModel.hasMore ? 56 : 24
+            property bool loadingMore: false
+
+            Connections {
+                target: TimelineModel
+                function onCountChanged() { footerItem.loadingMore = false }
+                function onHasMoreChanged() { footerItem.loadingMore = false }
+            }
+
+            Timer {
+                id: loadingTimeout
+                interval: 10000
+                onTriggered: footerItem.loadingMore = false
+            }
+
             Button {
                 anchors.centerIn: parent
                 visible: TimelineModel.hasMore
                 variant: "tonal"
                 size: "sm"
                 text: qsTr("Load more")
-                onClicked: TimelineModel.loadMore()
+                busy: footerItem.loadingMore
+                onClicked: {
+                    footerItem.loadingMore = true
+                    loadingTimeout.restart()
+                    TimelineModel.loadMore()
+                }
             }
         }
     }

@@ -10,10 +10,12 @@ FocusScope {
     property string text: ""
     property string label
     property bool tonal: false
+    property bool busy: false
     property color iconColor: tonal ? Theme.secondaryContainerContent : Theme.surfaceContentVariant
     signal clicked
 
     readonly property bool hasText: text.length > 0
+    readonly property bool interactive: enabled && !busy
     readonly property string effectiveTip: label.length > 0 ? label : text
 
     implicitWidth: hasText ? contentRow.implicitWidth + 24 : 34
@@ -27,9 +29,9 @@ FocusScope {
     Accessible.role: Accessible.Button
     Accessible.name: hasText ? text : label
     Accessible.description: hasText && label.length > 0 && label !== text ? label : ""
-    Accessible.onPressAction: if (enabled) button.clicked()
+    Accessible.onPressAction: if (interactive) button.clicked()
     Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+        if (interactive && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space)) {
             button.clicked()
             event.accepted = true
         }
@@ -59,8 +61,14 @@ FocusScope {
             opacity: mouse.pressed ? 0.14 : (mouse.containsMouse ? 0.08 : 0)
             Behavior on opacity { enabled: !Theme.reduceMotion; NumberAnimation { duration: Theme.fadeFast } }
         }
+        Spinner {
+            visible: button.busy && !button.hasText
+            anchors.centerIn: parent
+            width: button.iconSize; height: button.iconSize
+            color: button.iconColor
+        }
         Icon {
-            visible: !button.hasText
+            visible: !button.hasText && !button.busy
             anchors.centerIn: parent
             width: button.iconSize; height: button.iconSize
             path: button.iconPath
@@ -71,8 +79,14 @@ FocusScope {
             visible: button.hasText
             anchors.centerIn: parent
             spacing: 6
+            Spinner {
+                visible: button.busy
+                anchors.verticalCenter: parent.verticalCenter
+                width: button.iconSize; height: button.iconSize
+                color: button.iconColor
+            }
             Icon {
-                visible: button.iconPath.length > 0
+                visible: button.iconPath.length > 0 && !button.busy
                 anchors.verticalCenter: parent.verticalCenter
                 width: button.iconSize; height: button.iconSize
                 path: button.iconPath
@@ -101,7 +115,7 @@ FocusScope {
         id: tipTimer
         interval: 450
         repeat: false
-        running: mouse.containsMouse && !mouse.pressed && button.enabled && button.visible && button.effectiveTip.length > 0 && !tooltipPill.shown
+        running: mouse.containsMouse && !mouse.pressed && button.interactive && button.visible && button.effectiveTip.length > 0 && !tooltipPill.shown
         onTriggered: {
             if (mouse.containsMouse && button.visible) {
                 tooltipPill.reposition()
@@ -128,7 +142,7 @@ FocusScope {
         onParentChanged: if (shown) reposition()
         z: 1000
         visible: opacity > 0 && button.effectiveTip.length > 0
-        opacity: shown && mouse.containsMouse && !mouse.pressed && button.visible && button.enabled ? 1 : 0
+        opacity: shown && mouse.containsMouse && !mouse.pressed && button.visible && button.interactive ? 1 : 0
         Behavior on opacity { enabled: !Theme.reduceMotion; NumberAnimation { duration: Theme.fadeFast } }
         width: Math.min(tipText.implicitWidth + 18, 300)
         height: tipText.implicitHeight + 10
@@ -165,8 +179,9 @@ FocusScope {
     MouseArea {
         id: mouse
         anchors.fill: parent
+        enabled: button.interactive
         hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: button.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
         onContainsMouseChanged: if (!containsMouse) tooltipPill.shown = false
         onClicked: {
             tooltipPill.shown = false

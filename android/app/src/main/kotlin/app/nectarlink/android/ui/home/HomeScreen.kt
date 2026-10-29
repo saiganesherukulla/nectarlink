@@ -44,6 +44,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -1143,9 +1144,13 @@ private fun PermissionsSetupCard(
                     }
                 }
                 if (!state.notificationAccess) {
+                    val isAndroid13Plus = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU
                     SetupCard(
-                        stringResource(R.string.notifications_title),
-                        stringResource(R.string.notifications_off),
+                        title = stringResource(R.string.notifications_title),
+                        text = stringResource(R.string.notifications_off),
+                        guide = if (isAndroid13Plus) stringResource(R.string.notifications_restricted) else null,
+                        secondaryLabel = if (isAndroid13Plus) stringResource(R.string.walkthrough_restricted_open) else null,
+                        onSecondary = if (isAndroid13Plus) { { openAppDetailsSettings(context) } } else null,
                     ) {
                         runCatching { context.startActivity(NotificationListener.settingsIntent(context)) }
                     }
@@ -1166,9 +1171,13 @@ private fun PermissionsSetupCard(
                     }
                 }
                 if (!state.inputAccess && !state.elevated) {
+                    val isAndroid13Plus = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU
                     SetupCard(
-                        stringResource(R.string.control_title),
-                        stringResource(R.string.control_off),
+                        title = stringResource(R.string.control_title),
+                        text = stringResource(R.string.control_off),
+                        guide = if (isAndroid13Plus) stringResource(R.string.notifications_restricted) else null,
+                        secondaryLabel = if (isAndroid13Plus) stringResource(R.string.walkthrough_restricted_open) else null,
+                        onSecondary = if (isAndroid13Plus) { { openAppDetailsSettings(context) } } else null,
                     ) {
                         runCatching { context.startActivity(InputService.settingsIntent()) }
                     }
@@ -1413,12 +1422,20 @@ private fun PcCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Spacer(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .padding(1.dp)
-                        .drawBehind { drawCircle(statusDotColor) },
-                )
+                if (!device.online && device.wakeState == WakeState.Waking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 1.5.dp,
+                        color = ink,
+                    )
+                } else {
+                    Spacer(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .padding(1.dp)
+                            .drawBehind { drawCircle(statusDotColor) },
+                    )
+                }
                 Spacer(Modifier.width(8.dp))
                 Text(
                     if (!device.online && device.wakeState == WakeState.Waking) {
@@ -2366,11 +2383,18 @@ private fun ClipboardHistoryRow(
                             contentScale = ContentScale.Fit,
                         )
                     } else {
-                        Text(
-                            stringResource(R.string.clipboard_history_image),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 4.dp),
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text(
+                                stringResource(R.string.clipboard_history_image),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -2992,6 +3016,8 @@ private fun TimelineDialog(
     var deviceFilter by remember { mutableStateOf<String?>(null) }
     var pagedEntries by remember { mutableStateOf<List<TimelineEntry>>(state.timeline) }
     var hasMore by remember { mutableStateOf(state.timelineHasMore) }
+    var loading by remember { mutableStateOf(false) }
+    var loadingMore by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(state.timeline, search, kindFilter, deviceFilter) {
@@ -3000,9 +3026,11 @@ private fun TimelineDialog(
             pagedEntries = state.timeline
             hasMore = state.timelineHasMore
         } else {
+            loading = true
             val page = queryPage(kindFilter, deviceFilter, trimmed, 0u)
             pagedEntries = page?.items ?: emptyList()
             hasMore = page?.hasMore ?: false
+            loading = false
         }
     }
 
@@ -3073,6 +3101,9 @@ private fun TimelineDialog(
                         }
                     }
                 }
+                if (loading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
                 when {
                     pagedEntries.isEmpty() && search.isBlank() && kindFilter == null && deviceFilter == null -> Text(
                         stringResource(R.string.timeline_empty),
@@ -3121,18 +3152,31 @@ private fun TimelineDialog(
                             if (hasMore) {
                                 item(key = "load_more") {
                                     OutlinedButton(
+                                        enabled = !loadingMore,
                                         onClick = {
                                             scope.launch {
-                                                val trimmed = search.trim().takeIf { it.isNotEmpty() }
-                                                val next = queryPage(kindFilter, deviceFilter, trimmed, pagedEntries.size.toUInt())
-                                                if (next != null) {
-                                                    pagedEntries = pagedEntries + next.items
-                                                    hasMore = next.hasMore
+                                                loadingMore = true
+                                                try {
+                                                    val trimmed = search.trim().takeIf { it.isNotEmpty() }
+                                                    val next = queryPage(kindFilter, deviceFilter, trimmed, pagedEntries.size.toUInt())
+                                                    if (next != null) {
+                                                        pagedEntries = pagedEntries + next.items
+                                                        hasMore = next.hasMore
+                                                    }
+                                                } finally {
+                                                    loadingMore = false
                                                 }
                                             }
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
+                                        if (loadingMore) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                        }
                                         Text(stringResource(R.string.timeline_action_load_more))
                                     }
                                 }

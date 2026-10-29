@@ -542,10 +542,9 @@ void NativeWindow::applyFrame()
     if (!handle())
         return;
     const HWND hwnd = hwndOf(this);
-    // No frame extension: Mica/Acrylic still shows behind transparent pixels (the
-    // swap chain is composited with DirectComposition), and DWM doesn't draw
-    // its own caption buttons over the app's.
-    const MARGINS margins { 0, 0, 0, 0 };
+    // Extend frame into client area by 1 pixel to ensure DWM renders standard
+    // drop shadows and rounded corners while WM_NCCALCSIZE removes the native title bar.
+    const MARGINS margins { 0, 0, 0, 1 };
     DwmExtendFrameIntoClientArea(hwnd, &margins);
     const BOOL dark = m_darkFrame;
     DwmSetWindowAttribute(hwnd, kUseImmersiveDarkMode, &dark, sizeof(dark));
@@ -553,6 +552,10 @@ void NativeWindow::applyFrame()
     DwmSetWindowAttribute(hwnd, kSystemBackdropType, &backdrop, sizeof(backdrop));
     const COLORREF none = kColorNone;
     DwmSetWindowAttribute(hwnd, kCaptionColor, &none, sizeof(none));
+
+    // Force frame update so WM_NCCALCSIZE takes effect immediately.
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 #elif defined(__linux__)
     setColor(m_darkFrame ? QColor(0x14, 0x13, 0x11) : QColor(0xF8, 0xF6, 0xF2));
     if (!property("_nl_linux_filter").toBool()) {
@@ -589,20 +592,27 @@ long NativeWindow::hitTest(int screenX, int screenY) const
     POINT pt { screenX, screenY };
     ScreenToClient(hwnd, &pt);
 
-    // The system title bar is gone, and with it the top resize border.
-    // A window of fixed size has none.
+    // The system title bar is removed, and client area covers the whole window.
+    // Provide hit tests for borders when not maximized.
     if (!IsZoomed(hwnd) && minimumSize() != maximumSize()) {
         const UINT dpi = GetDpiForWindow(hwnd);
         const int border = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-        if (pt.y < border) {
-            RECT client {};
-            GetClientRect(hwnd, &client);
-            if (pt.x < border * 2)
-                return HTTOPLEFT;
-            if (pt.x >= client.right - border * 2)
-                return HTTOPRIGHT;
-            return HTTOP;
-        }
+        RECT client {};
+        GetClientRect(hwnd, &client);
+
+        const bool top = pt.y < border;
+        const bool bottom = pt.y >= client.bottom - border;
+        const bool left = pt.x < border;
+        const bool right = pt.x >= client.right - border;
+
+        if (top && left) return HTTOPLEFT;
+        if (top && right) return HTTOPRIGHT;
+        if (bottom && left) return HTBOTTOMLEFT;
+        if (bottom && right) return HTBOTTOMRIGHT;
+        if (top) return HTTOP;
+        if (bottom) return HTBOTTOM;
+        if (left) return HTLEFT;
+        if (right) return HTRIGHT;
     }
 
     const qreal dpr = devicePixelRatio();
@@ -631,6 +641,26 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
     const MSG *msg = static_cast<const MSG *>(message);
 
     switch (msg->message) {
+    case WM_NCCALCSIZE: {
+        if (msg->wParam) {
+            // Returning 0 indicates that the client area covers the entire window.
+            // When maximized, Windows inflates the window rectangle past the work area by
+            // the resize border (SM_CXSIZEFRAME + SM_CXPADDEDBORDER). We adjust rgrc[0]
+            // so the client area neatly matches the monitor work area.
+            if (IsZoomed(msg->hwnd)) {
+                auto *params = reinterpret_cast<NCCALCSIZE_PARAMS *>(msg->lParam);
+                const HMONITOR monitor = MonitorFromWindow(msg->hwnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO info { sizeof(MONITORINFO) };
+                if (GetMonitorInfo(monitor, &info)) {
+                    params->rgrc[0] = info.rcWork;
+                }
+            }
+            *result = 0;
+            return true;
+        }
+        *result = 0;
+        return true;
+    }
     case WM_NCHITTEST: {
         const long hit = hitTest(GET_X_LPARAM(msg->lParam), GET_Y_LPARAM(msg->lParam));
         if (hit != HTCLIENT) {

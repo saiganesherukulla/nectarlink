@@ -1268,6 +1268,23 @@ Item {
                 columns: width > 640 ? 4 : 2
                 spacing: 12
                 readonly property real tileWidth: (width - spacing * (columns - 1)) / columns
+                property bool mirrorStarting: false
+                Connections {
+                    target: Mirror
+                    function onWindowsChanged() {
+                        if (actions.mirrorStarting) {
+                            try {
+                                if (JSON.parse(Mirror.windows).some(w => w.device === home.deviceId && w.session === 0 && w.phase !== "ended"))
+                                    actions.mirrorStarting = false
+                            } catch (e) {}
+                        }
+                    }
+                }
+                Timer {
+                    id: mirrorStartTimeout
+                    interval: 6000
+                    onTriggered: actions.mirrorStarting = false
+                }
 
                 ActionTile {
                     width: actions.tileWidth
@@ -1276,6 +1293,7 @@ Item {
                     subtitle: ""
                     iconPath: Icons.mirror
                     feature: home.feature("mirroring.view")
+                    busy: actions.mirrorStarting && !active
                     // The phone's screen is showing (its session is 0).
                     active: {
                         try {
@@ -1285,7 +1303,13 @@ Item {
                             return false
                         }
                     }
-                    onClicked: Mirror.start(home.deviceId)
+                    onClicked: {
+                        if (!active) {
+                            actions.mirrorStarting = true
+                            mirrorStartTimeout.restart()
+                        }
+                        Mirror.start(home.deviceId)
+                    }
                     sideIcon: home.feature("mirroring.app_windows").state === "available" ? Icons.apps : ""
                     sideLabel: qsTr("Open an app")
                     onSideClicked: appsSheet.openFor(home.deviceId, home.name)
@@ -2992,6 +3016,7 @@ Item {
         property string iconPath
         property var feature: ({})
         property bool active: false
+        property bool busy: false
         property bool accented: false
         property bool deviceOnline: true
         // A second, smaller action in the corner (e.g. "Send a folder").
@@ -3058,7 +3083,16 @@ Item {
                 border.width: Theme.graphite ? 1 : 0
                 border.color: Theme.outlineVariant
                 opacity: tile.available ? 1 : 0.55
+                Spinner {
+                    anchors.centerIn: parent
+                    visible: tile.busy
+                    width: 17; height: 17
+                    color: tile.active
+                        ? Theme.primaryContent
+                        : (tile.accented && !Theme.graphite ? Theme.primaryContainerContent : Theme.secondaryContainerContent)
+                }
                 Icon {
+                    visible: !tile.busy
                     anchors.centerIn: parent
                     width: 17; height: 17
                     path: tile.iconPath
@@ -3405,6 +3439,11 @@ Item {
                             : qsTr("LocalSend nearby")
                     }
                 }
+                Timer {
+                    id: lsRefreshTimer
+                    interval: 1500
+                    onTriggered: lsRefreshBtn.busy = false
+                }
                 Button {
                     id: lsRefreshBtn
                     anchors.right: parent.right
@@ -3412,7 +3451,12 @@ Item {
                     variant: "text"
                     size: "sm"
                     text: qsTr("Refresh")
-                    onClicked: AppController.refreshLocalsend()
+                    busy: false
+                    onClicked: {
+                        busy = true
+                        lsRefreshTimer.restart()
+                        AppController.refreshLocalsend()
+                    }
                 }
             }
             Txt {

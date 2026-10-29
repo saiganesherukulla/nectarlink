@@ -172,8 +172,9 @@ Window {
         return "idle"
     }
 
+    property bool mainWindowActive: false
     readonly property bool hasActivity: mode !== "idle"
-    visible: Preferences.nectarIsland && hasActivity
+    visible: Preferences.nectarIsland && hasActivity && !mainWindowActive
 
     onVisibleChanged: {
         if (visible) {

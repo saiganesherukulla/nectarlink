@@ -258,14 +258,32 @@ Item {
         id: cell
         property var app: ({})
         readonly property bool isOpen: page.openPkgs[app.pkg] === true
+        property bool launching: false
+        onIsOpenChanged: if (isOpen) launching = false
+        Timer {
+            id: launchTimer
+            interval: 5000
+            repeat: false
+            onTriggered: cell.launching = false
+        }
+        function triggerLaunch() {
+            if (isOpen) {
+                page.launch(app)
+                return
+            }
+            cell.launching = true
+            launchTimer.restart()
+            page.launch(app)
+        }
+
         height: grid.cellHeight
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
-        Accessible.name: isOpen ? qsTr("%1, open").arg(app.label) : app.label
-        Accessible.onPressAction: page.launch(app)
-        Keys.onReturnPressed: page.launch(app)
-        Keys.onEnterPressed: page.launch(app)
-        Keys.onSpacePressed: page.launch(app)
+        Accessible.name: isOpen ? qsTr("%1, open").arg(app.label) : (launching ? qsTr("%1, opening…").arg(app.label) : app.label)
+        Accessible.onPressAction: cell.triggerLaunch()
+        Keys.onReturnPressed: cell.triggerLaunch()
+        Keys.onEnterPressed: cell.triggerLaunch()
+        Keys.onSpacePressed: cell.triggerLaunch()
 
         Rectangle {
             anchors.fill: parent
@@ -298,11 +316,19 @@ Item {
                     smooth: true
                     mipmap: true
                     visible: status === Image.Ready
+                    opacity: cell.launching && !cell.isOpen ? 0.4 : 1.0
+                    Behavior on opacity { enabled: !Theme.reduceMotion; NumberAnimation { duration: 180 } }
                 }
                 Avatar {
                     anchors.fill: parent
                     visible: icon.status !== Image.Ready
                     name: cell.app.label || ""
+                    opacity: cell.launching && !cell.isOpen ? 0.4 : 1.0
+                }
+                Spinner {
+                    anchors.centerIn: parent
+                    visible: cell.launching && !cell.isOpen
+                    width: 24; height: 24
                 }
                 // Open in a window on this PC.
                 Rectangle {

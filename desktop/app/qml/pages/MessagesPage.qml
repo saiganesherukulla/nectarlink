@@ -278,6 +278,7 @@ Item {
                 iconPath: Icons.refresh
                 label: qsTr("Refresh")
                 enabled: Messages.status !== "loading"
+                busy: Messages.status === "loading"
                 onClicked: Messages.refresh()
             }
         }
